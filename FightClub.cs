@@ -45,7 +45,7 @@ public class FightClub : Script
         { "Unaffiliated", new PedHash[] { PedHash.BankRobber01AMM } }
     };
     private PedHash bossPed = PedHash.Bodybuild01AFM;
-    private uint[] meleeWeapons =
+    private uint[] meleeWeapons = 
     {
         0x958A4A8F, // Bat
         0xF9E6AA4B, // Bottle
@@ -64,6 +64,7 @@ public class FightClub : Script
     private int bettingWindowStartTime = 0;
     private int promptStartTime = 0;
     private bool enteringBet = false;
+
     private string typedBet = "";
 
     private int playerWins = 0;
@@ -201,7 +202,7 @@ public class FightClub : Script
         string[] malePrefixes = { "Mad", "Iron", "Sly", "Bloody", "Quick", "Razor", "Silent", "Big", "Grim", "Sick", "Wild", "Cold", "Hard", "Lone", "Rough", "Steel" };
         string[] femalePrefixes = { "Fierce", "Vicious", "Swift", "Deadly", "Savage", "Sharp", "Quiet", "Tall", "Cruel", "Hot", "Bold", "Dark", "Tough", "Sly", "Wicked", "Frost" };
         string[] suffixes = { "Dog", "Blade", "Fist", "Shadow", "Bull", "Viper", "Hawk", "Wolf", "Skull", "Claw", "Reaper", "Ghost", "Tiger", "Raven", "Cobra", "Shark", "Bruiser", "Ace" };
-        bool isFemale = pedModel == PedHash.Ballas01GFY || pedModel == PedHash.Lost01GFY ||
+        bool isFemale = pedModel == PedHash.Ballas01GFY || pedModel == PedHash.Lost01GFY || 
                         pedModel == PedHash.Vagos01GFY || pedModel == PedHash.Families01GFY;
         string[] prefixes = isFemale ? femalePrefixes : malePrefixes;
         return prefixes[rand.Next(prefixes.Length)] + " " + suffixes[rand.Next(suffixes.Length)];
@@ -286,9 +287,10 @@ public class FightClub : Script
             }
         }
 
-        if (e.KeyCode == Keys.F5)
+        // Modified: F5 now triggers manual deactivation
+        if (e.KeyCode == Keys.F5 && isFightClubActive)
         {
-            EndFightClub();
+            EndFightClub(true); // Manual deactivation via F5
         }
     }
 
@@ -397,7 +399,7 @@ public class FightClub : Script
         else
         {
             Notification.PostTicker("Failed to spawn challenger. Ending fight...", true, true);
-            EndFightClub();
+            EndFightClub(false);
         }
     }
 
@@ -606,8 +608,8 @@ public class FightClub : Script
 
         if (ped != null && ped.Exists())
         {
-            bool isLeader = pedModel == PedHash.BallasLeader || pedModel == PedHash.VagosLeader || pedModel == PedHash.VagosSpeak ||
-                           pedModel == PedHash.ArmBoss01GMM || pedModel == PedHash.ArmLieut01GMM || pedModel == PedHash.KorBoss01GMM ||
+            bool isLeader = pedModel == PedHash.BallasLeader || pedModel == PedHash.VagosLeader || pedModel == PedHash.VagosSpeak || 
+                           pedModel == PedHash.ArmBoss01GMM || pedModel == PedHash.ArmLieut01GMM || pedModel == PedHash.KorBoss01GMM || 
                            pedModel == PedHash.SalvaBoss01GMY || pedModel == PedHash.MexBoss01GMM || pedModel == PedHash.MexBoss02GMM;
             Fighter fighter = new Fighter(ped, gang, GenerateNickname(pedModel));
             ped.Weapons.RemoveAll();
@@ -734,14 +736,14 @@ public class FightClub : Script
                 }
             }
         }
-        else // Added distance-based deactivation
+
+        // Added: Distance-based deactivation (20 units from activationSpot)
+        if (isFightClubActive)
         {
             float distance = Vector3.Distance(Game.Player.Character.Position, activationSpot);
             if (distance > 20.0f)
             {
-                EndFightClub();
-                Notification.PostTicker("Fight Club ended: You moved too far from the arena.", true, true);
-                return;
+                EndFightClub(false); // Distance-based deactivation
             }
         }
 
@@ -787,7 +789,7 @@ public class FightClub : Script
                 Function.Call(Hash.NETWORK_SET_LOCAL_PLAYER_INVINCIBLE_TIME, 500);
 
                 Function.Call(Hash.CLEAR_PED_BLOOD_DAMAGE, Game.Player.Character);
-                Function.Call((Hash)0xC0AA53F866B3134D); // FORCE_GAME_STATE_PLAYING
+                Function.Call((Hash)0xC0AA53F866B3134D); // FORCE_GAME_STATE_PLAYING (early)
                 Function.Call(Hash.SET_ENTITY_RENDER_SCORCHED, Game.Player.Character, false);
                 Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, false, 0);
 
@@ -804,7 +806,7 @@ public class FightClub : Script
                 Function.Call(Hash.IGNORE_NEXT_RESTART, false);
                 Function.Call((Hash)0xA2716D40842EAF79); // CLEAR_RESTART_COORD_OVERRIDE
                 Function.Call((Hash)0x2C2B3493FBF51C71, false); // Unpause death/arrest restart
-                Function.Call((Hash)0xC0AA53F866B3134D); // FORCE_GAME_STATE_PLAYING
+                Function.Call((Hash)0xC0AA53F866B3134D); // FORCE_GAME_STATE_PLAYING (late)
                 Function.Call(Hash.SET_PLAYER_CONTROL, Game.Player, true, 0);
                 Function.Call(Hash.SET_ENTITY_INVINCIBLE, Game.Player.Character, false);
                 Function.Call(Hash.DISPLAY_HUD, true);
@@ -815,7 +817,7 @@ public class FightClub : Script
                 HandlePlayerDeath();
 
                 int postDeathCheck = Game.GameTime;
-                while (Game.GameTime - postDeathCheck < 2000)
+                while (Game.GameTime - postDeathCheck < 5000)
                 {
                     if (Vector3.Distance(Game.Player.Character.Position, ringCenter) > 10f || Game.Player.Character.Position.Z > respawnPos.Z + 0.5f)
                     {
@@ -956,18 +958,21 @@ public class FightClub : Script
     private void HandlePlayerDeath()
     {
         RestorePlayerWeapons();
+
         playerLosses++;
         playerWinStreak = 0;
+
         int penalty = 500;
         if (Game.Player.Money >= penalty)
         {
             Game.Player.Money -= penalty;
-            Notification.PostTicker("You lost! Penalty: -$" + penalty + ". New round incoming...", true, true);
+            totalEarnings -= penalty;
+            Notification.PostTicker("You lost! Fight club penalty: -$" + penalty + ". New round incoming...", true, true);
         }
         else
         {
             Game.Player.Money = 0;
-            Notification.PostTicker("You lost! Bankrupted! New round incoming...", true, true);
+            Notification.PostTicker("You lost! Fight club penalty: Bankrupted! New round incoming...", true, true);
         }
 
         playerFighting = false;
@@ -978,7 +983,8 @@ public class FightClub : Script
             survivingFighter = winnerFighter;
             survivingFighter.Ped.Health = survivingFighter.Ped.MaxHealth;
             survivingFighter.Ped.Position = ringCenter + new Vector3(-1.0f, 0, 0);
-            Notification.PostTicker(survivingFighter.Nickname + " stands victorious!", true, true);
+            survivingFighter.Ped.Heading = 270f;
+            Notification.PostTicker(survivingFighter.Nickname + " from " + survivingFighter.Gang + " stands victorious!", true, true);
         }
 
         foreach (Fighter f in fightParticipants)
@@ -989,8 +995,12 @@ public class FightClub : Script
             }
         }
         fightParticipants.Clear();
+        if (loserFighter != null && loserFighter.Ped.Exists() && loserFighter.Ped != Game.Player.Character)
+        {
+            loserFighter.Ped.Delete();
+            loserFighter = null;
+        }
 
-        Fighter challenger = null;
         if (survivingFighter != null)
         {
             currentFighter = survivingFighter;
@@ -1007,7 +1017,7 @@ public class FightClub : Script
             fightParticipants.Add(currentFighter);
             fightParticipants.Add(challenger);
 
-            // AI aggression fix: Ensure surviving fighter targets new challenger
+            // Added: Reset AI combat targets to fight each other, not the player
             if (currentFighter.Ped.Exists())
             {
                 currentFighter.Ped.Task.ClearAll();
@@ -1028,7 +1038,7 @@ public class FightClub : Script
         }
         else
         {
-            Notification.PostTicker("Failed to spawn fighters. Ending session.", true, true);
+            Notification.PostTicker("Failed to spawn fighters. Ending Fight Club.", true, true);
             isFightClubActive = false;
         }
 
@@ -1091,7 +1101,8 @@ public class FightClub : Script
         }
     }
 
-    private void EndFightClub()
+    // Modified: Added parameter to distinguish manual vs. distance-based deactivation
+    private void EndFightClub(bool manualDeactivation = true)
     {
         bettingActive = false;
         enteringBet = false;
@@ -1110,7 +1121,14 @@ public class FightClub : Script
             RestorePlayerWeapons();
             playerWeapons.Clear();
             isFightClubActive = false;
-            Notification.PostTicker(string.Format("Fight Club ended. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Move to an activation spot to start again.", playerWins, playerLosses, totalEarnings), true, true);
+            if (manualDeactivation)
+            {
+                Notification.PostTicker(string.Format("Fight Club manually ended. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Move to an activation spot to start again.", playerWins, playerLosses, totalEarnings), true, true);
+            }
+            else
+            {
+                Notification.PostTicker(string.Format("Fight Club ended due to distance. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Move to an activation spot to start again.", playerWins, playerLosses, totalEarnings), true, true);
+            }
         }
         else
         {
