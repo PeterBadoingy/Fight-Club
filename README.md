@@ -1,3 +1,25 @@
+
+Overview of the Script
+
+
+
+Bet on AI fighters or join fights themselves.
+
+Manage multiple arenas loaded from an INI file.
+
+Track stats like wins, losses, earnings, and win streaks.
+
+Encounter progressively tougher opponents, including boss fights.
+
+
+
+
+
+
+
+
+
+
 Key Components and Functionality
 1. Fields and Data Structures
 Arena Management: 
