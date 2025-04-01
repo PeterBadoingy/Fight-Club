@@ -13,7 +13,7 @@ Encounter progressively tougher opponents, including boss fights.
 
 
 
-
+------------------------------------------------------------------------
 
 
 
@@ -46,6 +46,10 @@ State Flags and Timers:
 Flags like bettingActive, playerFighting, choosingMode, and promptingContinue manage the fight club’s state.
 
 Timers (bettingWindowTimer, promptDuration, etc.) control phases like betting and post-fight prompts.
+
+
+--------------------------------------------------------------------------------------
+
 
 2. Core Methods
 LoadArenasFromIni(): 
