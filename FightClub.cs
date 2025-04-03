@@ -1,5 +1,4 @@
 using System;
-using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using GTA;
@@ -8,6 +7,7 @@ using GTA.Math;
 using GTA.UI;
 using System.IO;
 using System.Linq;
+
 public class FightClub : Script
 {
     private Vector3 ringCenter;
@@ -72,11 +72,13 @@ public class FightClub : Script
     private List<PlayerWeaponData> playerWeapons = new List<PlayerWeaponData>();
     private bool isFightClubActive = false;
     private List<Arena> arenas = new List<Arena>();
+
     private class Arena
     {
         public string Name { get; set; }
         public Vector3 RingCenter { get; set; }
         public Vector3 ActivationSpot { get; set; }
+        public Blip Blip { get; set; } // Added for blip support
 
         public Arena(string name, Vector3 ringCenter, Vector3 activationSpot)
         {
@@ -85,6 +87,7 @@ public class FightClub : Script
             ActivationSpot = activationSpot;
         }
     }
+
     private class Fighter
     {
         public Ped Ped { get; set; }
@@ -102,6 +105,7 @@ public class FightClub : Script
             Losses = 0;
         }
     }
+
     private struct PlayerWeaponData
     {
         public uint Hash;
@@ -117,13 +121,15 @@ public class FightClub : Script
             Components = components;
         }
     }
+
     private readonly uint[] specialAmmoTypes = new uint[]
     {
-    0xF3956D61, // FMJ
-    0x85FEA109, // Incendiary
-    0x4C24806E, // Hollow Point
-    0x8FBA139B  // Tracer
+        0xF3956D61, // FMJ
+        0x85FEA109, // Incendiary
+        0x4C24806E, // Hollow Point
+        0x8FBA139B  // Tracer
     };
+
     public FightClub()
     {
         Tick += OnTick;
@@ -131,6 +137,7 @@ public class FightClub : Script
         betAmount = baseBetAmount;
         LoadArenasFromIni();
     }
+
     private void LoadArenasFromIni()
     {
         string iniPath = Path.Combine("scripts", "FightClubArenas.ini");
@@ -152,7 +159,14 @@ public class FightClub : Script
             {
                 if (currentName != null && ringCenter != Vector3.Zero && activationSpot != Vector3.Zero)
                 {
-                    arenas.Add(new Arena(currentName, ringCenter, activationSpot));
+                Arena arena = new Arena(currentName, ringCenter, activationSpot);
+                arena.Blip = World.CreateBlip(activationSpot); // Create blip
+                arena.Blip.Sprite = (BlipSprite)311; // Fist icon (ID 311)
+                arena.Blip.Name = currentName;
+                arena.Blip.Color = BlipColor.Yellow;
+                arena.Blip.IsShortRange = true; // Always visible
+                arena.Blip.Scale = 0.5f; // Adjust size here (e.g., 1.5x default size)
+                arenas.Add(arena);
                 }
                 currentName = trimmedLine.Substring(1, trimmedLine.Length - 2);
                 ringCenter = Vector3.Zero;
@@ -177,14 +191,29 @@ public class FightClub : Script
         }
         if (currentName != null && ringCenter != Vector3.Zero && activationSpot != Vector3.Zero)
         {
-            arenas.Add(new Arena(currentName, ringCenter, activationSpot));
+        Arena arena = new Arena(currentName, ringCenter, activationSpot);
+        arena.Blip = World.CreateBlip(activationSpot); // Create blip
+        arena.Blip.Sprite = (BlipSprite)311; // Fist icon (ID 311)
+        arena.Blip.Name = currentName;
+        arena.Blip.Color = BlipColor.Yellow;
+        arena.Blip.IsShortRange = true; // Always visible
+        arena.Blip.Scale = 0.5f; // Adjust size here (e.g., 1.5x default size)
+        arenas.Add(arena);
         }
 
         if (arenas.Count == 0)
         {
-            arenas.Add(new Arena("Underground Fight Club", new Vector3(-147.3509f, 1986.372f, 10.7097f), new Vector3(-150.9064f, 1980.082f, 10.70783f)));
+        Arena defaultArena = new Arena("Underground Fight Club", new Vector3(-147.3509f, 1986.372f, 10.7097f), new Vector3(-150.9064f, 1980.082f, 10.70783f));
+        defaultArena.Blip = World.CreateBlip(defaultArena.ActivationSpot); // Create blip
+        defaultArena.Blip.Sprite = (BlipSprite)311; // Fist icon (ID 311)
+        defaultArena.Blip.Name = defaultArena.Name;
+        defaultArena.Blip.Color = BlipColor.Yellow;
+        defaultArena.Blip.IsShortRange = true; // Always visible
+        defaultArena.Blip.Scale = 0.5f; // Adjust size here (e.g., 1.5x default size)
+        arenas.Add(defaultArena);
         }
     }
+
     private string GenerateNickname(PedHash pedModel)
     {
         string[] malePrefixes = { "Mad", "Iron", "Sly", "Bloody", "Quick", "Razor", "Silent", "Big", "Grim", "Sick", "Wild", "Cold", "Hard", "Lone", "Rough", "Steel" };
@@ -195,6 +224,7 @@ public class FightClub : Script
         string[] prefixes = isFemale ? femalePrefixes : malePrefixes;
         return prefixes[rand.Next(prefixes.Length)] + " " + suffixes[rand.Next(suffixes.Length)];
     }
+
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (bettingActive && choosingMode && !playerFighting && !enteringBet && bettedFighter == null && Game.GameTime - bettingWindowStartTime < choiceWindowTimer)
@@ -280,6 +310,7 @@ public class FightClub : Script
             EndFightClub(true); // Manual deactivation via F5
         }
     }
+
     private void JoinFightAsPlayer()
     {
         playerFighting = true;
@@ -314,6 +345,7 @@ public class FightClub : Script
 
         BeginFight();
     }
+
     private void ContinueFighting(bool heal)
     {
         bool isBossFight = playerWinStreak >= bossFightThreshold - 1;
@@ -379,6 +411,7 @@ public class FightClub : Script
             EndFightClub(false);
         }
     }
+
     private void StopFighting()
     {
         Notification.PostTicker(string.Format("You chose to stop fighting. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Preparing new fighters...", playerWins, playerLosses, totalEarnings), true, true);
@@ -426,6 +459,7 @@ public class FightClub : Script
             isFightClubActive = false;
         }
     }
+
     private void StorePlayerWeapons()
     {
         playerWeapons.Clear();
@@ -447,6 +481,7 @@ public class FightClub : Script
             }
         }
     }
+
     private void RestorePlayerWeapons()
     {
         Game.Player.Character.Weapons.RemoveAll();
@@ -479,6 +514,7 @@ public class FightClub : Script
             }
         }
     }
+
     private void ConfirmBetAmount()
     {
         enteringBet = false;
@@ -508,6 +544,7 @@ public class FightClub : Script
         }
         typedBet = "";
     }
+
     private void StartFightClub(string arenaName)
     {
         ClearFighters();
@@ -520,6 +557,7 @@ public class FightClub : Script
         ringCenter = selectedArena.RingCenter;
         activationSpot = selectedArena.ActivationSpot;
         currentArenaName = selectedArena.Name;
+        selectedArena.Blip.Color = BlipColor.Red; // Highlight active arena
         Notification.PostTicker("Fight Club started at " + selectedArena.Name + "!", true, true);
 
         bettingActive = true;
@@ -550,6 +588,7 @@ public class FightClub : Script
 
         Notification.PostTicker("New round! Press Left (←) to bet, Right (→) to fight (15s to choose).", true, true);
     }
+
     private void BeginFight()
     {
         if (currentFighter == null || !currentFighter.Ped.Exists() || challenger == null || !challenger.Ped.Exists())
@@ -567,6 +606,7 @@ public class FightClub : Script
         currentFighter.Ped.Task.Combat(challenger.Ped);
         challenger.Ped.Task.Combat(currentFighter.Ped);
     }
+
     private Fighter CreateFighter(bool centerSpawn = false, int side = 0, bool isBoss = false)
     {
         Vector3 spawnOffset = centerSpawn ? new Vector3(side * 1.0f, 0, 0) : new Vector3(rand.Next(0, 2) * 2 - 1, rand.Next(1, 3), 0);
@@ -616,10 +656,12 @@ public class FightClub : Script
         }
         return null;
     }
+
     private int CalculateOdds(int health)
     {
         return Math.Max(1, Math.Min(10, (int)Math.Round((float)health / 30)));
     }
+
     private void ResetFighter(Ped fighter)
     {
         if (fighter != null && fighter.Exists())
@@ -630,6 +672,7 @@ public class FightClub : Script
             fighter.Task.StandStill(-1);
         }
     }
+
     private void BetOnFighter(Fighter selectedFighter)
     {
         if (!bettingActive || selectedFighter == null || !selectedFighter.Ped.Exists() || bettedFighter != null)
@@ -653,10 +696,12 @@ public class FightClub : Script
             bettedFighter = null;
         }
     }
+
     private int GetOdds(int fighterIndex)
     {
         return fighterOdds[fighterIndex];
     }
+
     private void SpawnCrowd()
     {
         for (int i = 0; i < 6; i++)
@@ -678,6 +723,7 @@ public class FightClub : Script
             }
         }
     }
+
     private void OnTick(object sender, EventArgs e)
     {
         if (!isFightClubActive)
@@ -842,10 +888,12 @@ public class FightClub : Script
             EndFight();
         }
     }
+
     private bool IsFighterDeadOrUnconscious(Ped fighter)
     {
         return fighter == null || !fighter.Exists() || fighter.Health <= 0 || fighter.IsInjured;
     }
+
     private void EndFight(Fighter manualWinner = null, Fighter manualLoser = null)
     {
         bettingActive = false;
@@ -863,26 +911,26 @@ public class FightClub : Script
             loserFighter = null;
 
             // Check both fighters' states explicitly
-        bool fighter0Alive = !IsFighterDeadOrUnconscious(fightParticipants[0].Ped);
-        bool fighter1Alive = !IsFighterDeadOrUnconscious(fightParticipants[1].Ped);
+            bool fighter0Alive = !IsFighterDeadOrUnconscious(fightParticipants[0].Ped);
+            bool fighter1Alive = !IsFighterDeadOrUnconscious(fightParticipants[1].Ped);
 
-        if (fighter0Alive && !fighter1Alive)
-        {
-            winnerFighter = fightParticipants[0];
-            loserFighter = fightParticipants[1];
-            Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
+            if (fighter0Alive && !fighter1Alive)
+            {
+                winnerFighter = fightParticipants[0];
+                loserFighter = fightParticipants[1];
+                Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
+            }
+            else if (fighter1Alive && !fighter0Alive)
+            {
+                winnerFighter = fightParticipants[1];
+                loserFighter = fightParticipants[0];
+                Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
+            }
+            else
+            {
+                Notification.PostTicker("No winner could be determined!", true, true);
+            }
         }
-        else if (fighter1Alive && !fighter0Alive)
-        {
-            winnerFighter = fightParticipants[1];
-            loserFighter = fightParticipants[0];
-            Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
-        }
-        else
-        {
-            Notification.PostTicker("No winner could be determined!", true, true);
-        }
-    }
 
         if (winnerFighter != null) winnerFighter.Wins++;
         if (loserFighter != null) loserFighter.Losses++;
@@ -943,6 +991,7 @@ public class FightClub : Script
         if (!promptingContinue)
             DelayTimer();
     }
+
     private void HandlePlayerDeath()
     {
         RestorePlayerWeapons();
@@ -1046,6 +1095,7 @@ public class FightClub : Script
         winnerFighter = null;
         bettedFighter = null;
     }
+
     private void DelayTimer()
     {
         int delayStartTime = Game.GameTime;
@@ -1110,6 +1160,7 @@ public class FightClub : Script
             StartFightClub(currentArenaName); // No valid winner, restart fresh
         }
     }
+
     // Modified: Added parameter to distinguish manual vs. distance-based deactivation
     private void EndFightClub(bool manualDeactivation = true)
     {
@@ -1130,6 +1181,13 @@ public class FightClub : Script
             RestorePlayerWeapons();
             playerWeapons.Clear();
             isFightClubActive = false;
+            foreach (var arena in arenas) // Reset blip colors
+            {
+                if (arena.Blip.Exists())
+                {
+                    arena.Blip.Color = BlipColor.Yellow;
+                }
+            }
             if (manualDeactivation)
             {
                 Notification.PostTicker(string.Format("Fight Club manually ended. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Move to an activation spot to start again.", playerWins, playerLosses, totalEarnings), true, true);
@@ -1144,6 +1202,7 @@ public class FightClub : Script
             Notification.PostTicker("Fight Club is already ended.", true, true);
         }
     }
+
     private void ClearFighters()
     {
         foreach (Fighter f in fightParticipants)
@@ -1170,4 +1229,3 @@ public class FightClub : Script
         bettedFighter = null;
     }
 }
-
