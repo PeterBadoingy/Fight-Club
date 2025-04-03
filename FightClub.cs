@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using GTA;
@@ -7,7 +8,6 @@ using GTA.Math;
 using GTA.UI;
 using System.IO;
 using System.Linq;
-
 public class FightClub : Script
 {
     private Vector3 ringCenter;
@@ -19,7 +19,7 @@ public class FightClub : Script
     private int bettingWindowTimer = 15000;
     private int bossFightThreshold = 5;
     private int healCost = 250;
-
+    private bool isProcessingDeath = false; // Tracks if death is being handled
     private List<Fighter> fightParticipants = new List<Fighter>();
     private List<Ped> crowd = new List<Ped>();
     private Fighter currentFighter;
@@ -45,7 +45,7 @@ public class FightClub : Script
         { "Unaffiliated", new PedHash[] { PedHash.BankRobber01AMM } }
     };
     private PedHash bossPed = PedHash.Bodybuild01AFM;
-    private uint[] meleeWeapons = 
+    private uint[] meleeWeapons =
     {
         0x958A4A8F, // Bat
         0xF9E6AA4B, // Bottle
@@ -58,26 +58,20 @@ public class FightClub : Script
         0x19044EE0, // Wrench
         0x94117305, // Pool Cue
     };
-
     private Fighter winnerFighter = null;
     private Fighter loserFighter = null;
     private int bettingWindowStartTime = 0;
     private int promptStartTime = 0;
     private bool enteringBet = false;
-
     private string typedBet = "";
-
     private int playerWins = 0;
     private int playerLosses = 0;
     private int totalEarnings = 0;
     private int playerWinStreak = 0;
     private int[] fighterOdds = new int[2];
-
     private List<PlayerWeaponData> playerWeapons = new List<PlayerWeaponData>();
     private bool isFightClubActive = false;
-
     private List<Arena> arenas = new List<Arena>();
-
     private class Arena
     {
         public string Name { get; set; }
@@ -91,7 +85,6 @@ public class FightClub : Script
             ActivationSpot = activationSpot;
         }
     }
-
     private class Fighter
     {
         public Ped Ped { get; set; }
@@ -109,7 +102,6 @@ public class FightClub : Script
             Losses = 0;
         }
     }
-
     private struct PlayerWeaponData
     {
         public uint Hash;
@@ -125,15 +117,13 @@ public class FightClub : Script
             Components = components;
         }
     }
-
     private readonly uint[] specialAmmoTypes = new uint[]
     {
-        0xF3956D61, // FMJ
-        0x85FEA109, // Incendiary
-        0x4C24806E, // Hollow Point
-        0x8FBA139B  // Tracer
+    0xF3956D61, // FMJ
+    0x85FEA109, // Incendiary
+    0x4C24806E, // Hollow Point
+    0x8FBA139B  // Tracer
     };
-
     public FightClub()
     {
         Tick += OnTick;
@@ -141,7 +131,6 @@ public class FightClub : Script
         betAmount = baseBetAmount;
         LoadArenasFromIni();
     }
-
     private void LoadArenasFromIni()
     {
         string iniPath = Path.Combine("scripts", "FightClubArenas.ini");
@@ -196,18 +185,16 @@ public class FightClub : Script
             arenas.Add(new Arena("Underground Fight Club", new Vector3(-147.3509f, 1986.372f, 10.7097f), new Vector3(-150.9064f, 1980.082f, 10.70783f)));
         }
     }
-
     private string GenerateNickname(PedHash pedModel)
     {
         string[] malePrefixes = { "Mad", "Iron", "Sly", "Bloody", "Quick", "Razor", "Silent", "Big", "Grim", "Sick", "Wild", "Cold", "Hard", "Lone", "Rough", "Steel" };
         string[] femalePrefixes = { "Fierce", "Vicious", "Swift", "Deadly", "Savage", "Sharp", "Quiet", "Tall", "Cruel", "Hot", "Bold", "Dark", "Tough", "Sly", "Wicked", "Frost" };
         string[] suffixes = { "Dog", "Blade", "Fist", "Shadow", "Bull", "Viper", "Hawk", "Wolf", "Skull", "Claw", "Reaper", "Ghost", "Tiger", "Raven", "Cobra", "Shark", "Bruiser", "Ace" };
-        bool isFemale = pedModel == PedHash.Ballas01GFY || pedModel == PedHash.Lost01GFY || 
+        bool isFemale = pedModel == PedHash.Ballas01GFY || pedModel == PedHash.Lost01GFY ||
                         pedModel == PedHash.Vagos01GFY || pedModel == PedHash.Families01GFY;
         string[] prefixes = isFemale ? femalePrefixes : malePrefixes;
         return prefixes[rand.Next(prefixes.Length)] + " " + suffixes[rand.Next(suffixes.Length)];
     }
-
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (bettingActive && choosingMode && !playerFighting && !enteringBet && bettedFighter == null && Game.GameTime - bettingWindowStartTime < choiceWindowTimer)
@@ -293,7 +280,6 @@ public class FightClub : Script
             EndFightClub(true); // Manual deactivation via F5
         }
     }
-
     private void JoinFightAsPlayer()
     {
         playerFighting = true;
@@ -318,10 +304,6 @@ public class FightClub : Script
         int delayStart = Game.GameTime;
         while (Game.GameTime - delayStart < 3000)
         {
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 32, true); // MoveUpOnly (W)
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 33, true); // MoveDownOnly (S)
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 34, true); // MoveLeftOnly (A)
-            Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 35, true); // MoveRightOnly (D)
             Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 24, true); // Attack (Left Click)
             Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, 1, true);  // LookLeftOnly
             Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, 2, true);  // LookRightOnly
@@ -332,7 +314,6 @@ public class FightClub : Script
 
         BeginFight();
     }
-
     private void ContinueFighting(bool heal)
     {
         bool isBossFight = playerWinStreak >= bossFightThreshold - 1;
@@ -382,10 +363,6 @@ public class FightClub : Script
             int delayStart = Game.GameTime;
             while (Game.GameTime - delayStart < 3000)
             {
-                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 32, true); // MoveUpOnly (W)
-                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 33, true); // MoveDownOnly (S)
-                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 34, true); // MoveLeftOnly (A)
-                Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 35, true); // MoveRightOnly (D)
                 Function.Call(Hash.DISABLE_CONTROL_ACTION, 0, 24, true); // Attack (Left Click)
                 Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, 1, true);  // LookLeftOnly
                 Function.Call(Hash.ENABLE_CONTROL_ACTION, 0, 2, true);  // LookRightOnly
@@ -402,7 +379,6 @@ public class FightClub : Script
             EndFightClub(false);
         }
     }
-
     private void StopFighting()
     {
         Notification.PostTicker(string.Format("You chose to stop fighting. Stats: Wins: {0}, Losses: {1}, Earnings: ${2}. Preparing new fighters...", playerWins, playerLosses, totalEarnings), true, true);
@@ -450,7 +426,6 @@ public class FightClub : Script
             isFightClubActive = false;
         }
     }
-
     private void StorePlayerWeapons()
     {
         playerWeapons.Clear();
@@ -472,7 +447,6 @@ public class FightClub : Script
             }
         }
     }
-
     private void RestorePlayerWeapons()
     {
         Game.Player.Character.Weapons.RemoveAll();
@@ -505,7 +479,6 @@ public class FightClub : Script
             }
         }
     }
-
     private void ConfirmBetAmount()
     {
         enteringBet = false;
@@ -535,7 +508,6 @@ public class FightClub : Script
         }
         typedBet = "";
     }
-
     private void StartFightClub(string arenaName)
     {
         ClearFighters();
@@ -578,7 +550,6 @@ public class FightClub : Script
 
         Notification.PostTicker("New round! Press Left (←) to bet, Right (→) to fight (15s to choose).", true, true);
     }
-
     private void BeginFight()
     {
         if (currentFighter == null || !currentFighter.Ped.Exists() || challenger == null || !challenger.Ped.Exists())
@@ -596,7 +567,6 @@ public class FightClub : Script
         currentFighter.Ped.Task.Combat(challenger.Ped);
         challenger.Ped.Task.Combat(currentFighter.Ped);
     }
-
     private Fighter CreateFighter(bool centerSpawn = false, int side = 0, bool isBoss = false)
     {
         Vector3 spawnOffset = centerSpawn ? new Vector3(side * 1.0f, 0, 0) : new Vector3(rand.Next(0, 2) * 2 - 1, rand.Next(1, 3), 0);
@@ -608,8 +578,8 @@ public class FightClub : Script
 
         if (ped != null && ped.Exists())
         {
-            bool isLeader = pedModel == PedHash.BallasLeader || pedModel == PedHash.VagosLeader || pedModel == PedHash.VagosSpeak || 
-                           pedModel == PedHash.ArmBoss01GMM || pedModel == PedHash.ArmLieut01GMM || pedModel == PedHash.KorBoss01GMM || 
+            bool isLeader = pedModel == PedHash.BallasLeader || pedModel == PedHash.VagosLeader || pedModel == PedHash.VagosSpeak ||
+                           pedModel == PedHash.ArmBoss01GMM || pedModel == PedHash.ArmLieut01GMM || pedModel == PedHash.KorBoss01GMM ||
                            pedModel == PedHash.SalvaBoss01GMY || pedModel == PedHash.MexBoss01GMM || pedModel == PedHash.MexBoss02GMM;
             Fighter fighter = new Fighter(ped, gang, GenerateNickname(pedModel));
             ped.Weapons.RemoveAll();
@@ -646,12 +616,10 @@ public class FightClub : Script
         }
         return null;
     }
-
     private int CalculateOdds(int health)
     {
         return Math.Max(1, Math.Min(10, (int)Math.Round((float)health / 30)));
     }
-
     private void ResetFighter(Ped fighter)
     {
         if (fighter != null && fighter.Exists())
@@ -662,7 +630,6 @@ public class FightClub : Script
             fighter.Task.StandStill(-1);
         }
     }
-
     private void BetOnFighter(Fighter selectedFighter)
     {
         if (!bettingActive || selectedFighter == null || !selectedFighter.Ped.Exists() || bettedFighter != null)
@@ -686,12 +653,10 @@ public class FightClub : Script
             bettedFighter = null;
         }
     }
-
     private int GetOdds(int fighterIndex)
     {
         return fighterOdds[fighterIndex];
     }
-
     private void SpawnCrowd()
     {
         for (int i = 0; i < 6; i++)
@@ -713,7 +678,6 @@ public class FightClub : Script
             }
         }
     }
-
     private void OnTick(object sender, EventArgs e)
     {
         if (!isFightClubActive)
@@ -741,7 +705,7 @@ public class FightClub : Script
         if (isFightClubActive)
         {
             float distance = Vector3.Distance(Game.Player.Character.Position, activationSpot);
-            if (distance > 20.0f)
+            if (distance > 50.0f)
             {
                 EndFightClub(false); // Distance-based deactivation
             }
@@ -856,13 +820,13 @@ public class FightClub : Script
         {
             if (currentFighter != null && currentFighter.Ped.Exists())
             {
-                Vector3 markerPos = currentFighter.Ped.Position + new Vector3(0f, 0f, 1.5f);
-                Function.Call(Hash.DRAW_MARKER, 1, markerPos.X, markerPos.Y, markerPos.Z, 0f, 0f, 0f, 0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 255, 0, 0, 100, false, true, 2, false, 0, 0, false);
+                Vector3 markerPos = currentFighter.Ped.Position + new Vector3(0f, 0f, 1.2f);
+                Function.Call(Hash.DRAW_MARKER, 1, markerPos.X, markerPos.Y, markerPos.Z, 0f, 0f, 0f, 0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 255, 0, 0, 100, true, false, 2, false, 0, 0, false);
             }
             if (challenger != null && challenger.Ped.Exists())
             {
-                Vector3 markerPos = challenger.Ped.Position + new Vector3(0f, 0f, 1.5f);
-                Function.Call(Hash.DRAW_MARKER, 1, markerPos.X, markerPos.Y, markerPos.Z, 0f, 0f, 0f, 0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 0, 0, 255, 100, false, true, 2, false, 0, 0, false);
+                Vector3 markerPos = challenger.Ped.Position + new Vector3(0f, 0f, 1.2f);
+                Function.Call(Hash.DRAW_MARKER, 1, markerPos.X, markerPos.Y, markerPos.Z, 0f, 0f, 0f, 0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 0, 0, 255, 100, true, false, 2, false, 0, 0, false);
             }
             GTA.UI.Screen.ShowSubtitle("Red: " + currentFighter.Nickname + " (" + currentFighter.Gang + ", " + currentFighter.Wins + "-" + currentFighter.Losses + ") | Blue: " + challenger.Nickname + " (" + challenger.Gang + ", " + challenger.Wins + "-" + challenger.Losses + ") | Bet: $" + betAmount + " | Your Record: " + playerWins + "-" + playerLosses, 100);
         }
@@ -878,29 +842,47 @@ public class FightClub : Script
             EndFight();
         }
     }
-
     private bool IsFighterDeadOrUnconscious(Ped fighter)
     {
         return fighter == null || !fighter.Exists() || fighter.Health <= 0 || fighter.IsInjured;
     }
-
-    private void EndFight()
+    private void EndFight(Fighter manualWinner = null, Fighter manualLoser = null)
     {
         bettingActive = false;
         Notification.PostTicker("Fight is over!", true, true);
 
-        winnerFighter = null;
-        loserFighter = null;
-        if (!IsFighterDeadOrUnconscious(fightParticipants[0].Ped))
+        if (manualWinner != null && manualLoser != null)
+        {
+            winnerFighter = manualWinner;
+            loserFighter = manualLoser;
+            Notification.PostTicker("Winner set (manual): " + winnerFighter.Nickname, true, true);
+        }
+        else
+        {
+            winnerFighter = null;
+            loserFighter = null;
+
+            // Check both fighters' states explicitly
+        bool fighter0Alive = !IsFighterDeadOrUnconscious(fightParticipants[0].Ped);
+        bool fighter1Alive = !IsFighterDeadOrUnconscious(fightParticipants[1].Ped);
+
+        if (fighter0Alive && !fighter1Alive)
         {
             winnerFighter = fightParticipants[0];
             loserFighter = fightParticipants[1];
+            Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
         }
-        else if (!IsFighterDeadOrUnconscious(fightParticipants[1].Ped))
+        else if (fighter1Alive && !fighter0Alive)
         {
             winnerFighter = fightParticipants[1];
             loserFighter = fightParticipants[0];
+            Notification.PostTicker("The winner is " + winnerFighter.Nickname + "!", true, true);
         }
+        else
+        {
+            Notification.PostTicker("No winner could be determined!", true, true);
+        }
+    }
 
         if (winnerFighter != null) winnerFighter.Wins++;
         if (loserFighter != null) loserFighter.Losses++;
@@ -930,7 +912,14 @@ public class FightClub : Script
             {
                 playerLosses++;
                 playerWinStreak = 0;
-                Notification.PostTicker("You lost to " + winnerFighter.Nickname + " from " + winnerFighter.Gang + "! Respawning...", true, true);
+                if (winnerFighter != null)
+                {
+                    Notification.PostTicker("You lost to " + winnerFighter.Nickname + " from " + winnerFighter.Gang + "! Respawning...", true, true);
+                }
+                else
+                {
+                    Notification.PostTicker("You lost, but no winner set! Respawning...", true, true);
+                }
             }
         }
         else if (bettedFighter != null && bettedFighter == winnerFighter)
@@ -954,39 +943,43 @@ public class FightClub : Script
         if (!promptingContinue)
             DelayTimer();
     }
-
     private void HandlePlayerDeath()
     {
         RestorePlayerWeapons();
-
         playerLosses++;
         playerWinStreak = 0;
-
         int penalty = 500;
         if (Game.Player.Money >= penalty)
         {
             Game.Player.Money -= penalty;
-            totalEarnings -= penalty;
-            Notification.PostTicker("You lost! Fight club penalty: -$" + penalty + ". New round incoming...", true, true);
+            Notification.PostTicker("You lost! Penalty: -$" + penalty + ". New round incoming...", true, true);
         }
         else
         {
             Game.Player.Money = 0;
-            Notification.PostTicker("You lost! Fight club penalty: Bankrupted! New round incoming...", true, true);
+            Notification.PostTicker("You lost! Bankrupted! New round incoming...", true, true);
         }
 
         playerFighting = false;
 
+        // Explicitly determine the surviving fighter
         Fighter survivingFighter = null;
-        if (winnerFighter != null && winnerFighter.Ped.Exists() && !winnerFighter.Ped.IsDead && winnerFighter.Ped != Game.Player.Character)
+        if (fightParticipants.Count == 2)
         {
-            survivingFighter = winnerFighter;
-            survivingFighter.Ped.Health = survivingFighter.Ped.MaxHealth;
-            survivingFighter.Ped.Position = ringCenter + new Vector3(-1.0f, 0, 0);
-            survivingFighter.Ped.Heading = 270f;
-            Notification.PostTicker(survivingFighter.Nickname + " from " + survivingFighter.Gang + " stands victorious!", true, true);
+            Fighter opponent = (fightParticipants[0].Ped == Game.Player.Character) ? fightParticipants[1] : fightParticipants[0];
+            if (opponent != null && opponent.Ped.Exists() && !IsFighterDeadOrUnconscious(opponent.Ped))
+            {
+                survivingFighter = opponent;
+                winnerFighter = survivingFighter; // Ensure winnerFighter is set
+                Notification.PostTicker(survivingFighter.Nickname + " defeated you and stands victorious!", true, true);
+            }
+            else
+            {
+                Notification.PostTicker("No clear winner detected after death. Starting fresh round...", true, true);
+            }
         }
 
+        // Clean up and reset
         foreach (Fighter f in fightParticipants)
         {
             if (f != null && f.Ped.Exists() && f.Ped != Game.Player.Character && f != survivingFighter)
@@ -995,38 +988,46 @@ public class FightClub : Script
             }
         }
         fightParticipants.Clear();
-        if (loserFighter != null && loserFighter.Ped.Exists() && loserFighter.Ped != Game.Player.Character)
-        {
-            loserFighter.Ped.Delete();
-            loserFighter = null;
-        }
+        currentFighter = null;
+        challenger = null;
 
+        // Set up next round
         if (survivingFighter != null)
         {
             currentFighter = survivingFighter;
-            challenger = CreateFighter(true, 1);
+            ResetFighter(currentFighter.Ped); // Reset the winner’s state
+            currentFighter.Ped.Position = ringCenter + new Vector3(-1.0f, 0, 0); // Position on left
+            currentFighter.Ped.Heading = 270f; // Face right (towards challenger)
         }
         else
         {
-            currentFighter = CreateFighter(true, -1);
-            challenger = CreateFighter(true, 1);
+            currentFighter = CreateFighter(true, -1); // New fighter on left
         }
+        challenger = CreateFighter(true, 1); // New challenger on right
 
         if (currentFighter != null && challenger != null)
         {
+            if (challenger.Ped == Game.Player.Character)
+            {
+                Notification.PostTicker("Error: Challenger is player! Forcing new challenger...", true, true);
+                challenger = CreateFighter(true, 1);
+            }
+
             fightParticipants.Add(currentFighter);
             fightParticipants.Add(challenger);
 
-            // Added: Reset AI combat targets to fight each other, not the player
+            // Ensure both fighters are fully reset and facing each other
             if (currentFighter.Ped.Exists())
             {
-                currentFighter.Ped.Task.ClearAll();
-                currentFighter.Ped.Task.Combat(challenger.Ped);
+                ResetFighter(currentFighter.Ped);
+                currentFighter.Ped.Position = ringCenter + new Vector3(-1.0f, 0, 0);
+                currentFighter.Ped.Heading = 270f; // Face right
             }
             if (challenger.Ped.Exists())
             {
-                challenger.Ped.Task.ClearAll();
-                challenger.Ped.Task.Combat(currentFighter.Ped);
+                ResetFighter(challenger.Ped);
+                challenger.Ped.Position = ringCenter + new Vector3(1.0f, 0, 0);
+                challenger.Ped.Heading = 90f; // Face left
             }
 
             fighterOdds[0] = CalculateOdds(currentFighter.Ped.Health);
@@ -1038,14 +1039,13 @@ public class FightClub : Script
         }
         else
         {
-            Notification.PostTicker("Failed to spawn fighters. Ending Fight Club.", true, true);
+            Notification.PostTicker("Failed to spawn fighters. Ending session.", true, true);
             isFightClubActive = false;
         }
 
         winnerFighter = null;
         bettedFighter = null;
     }
-
     private void DelayTimer()
     {
         int delayStartTime = Game.GameTime;
@@ -1065,20 +1065,30 @@ public class FightClub : Script
         {
             if (winnerFighter.Ped == Game.Player.Character)
             {
-                return;
+                return; // Player won, waiting for prompt response
             }
             else
             {
-                winnerFighter.Ped.Health = winnerFighter.Ped.MaxHealth;
+                // Reset the winning AI for the next round
+                ResetFighter(winnerFighter.Ped);
                 winnerFighter.Ped.Position = ringCenter + new Vector3(-1.0f, 0, 0);
-                winnerFighter.Ped.Heading = 270f;
+                winnerFighter.Ped.Heading = 270f; // Face right
                 currentFighter = winnerFighter;
-                challenger = CreateFighter(true, 1);
+                challenger = CreateFighter(true, 1); // New challenger on right
+
                 if (challenger != null)
                 {
                     fightParticipants.Clear();
                     fightParticipants.Add(currentFighter);
                     fightParticipants.Add(challenger);
+
+                    // Ensure challenger is reset and facing the winner
+                    if (challenger.Ped.Exists())
+                    {
+                        ResetFighter(challenger.Ped);
+                        challenger.Ped.Position = ringCenter + new Vector3(1.0f, 0, 0);
+                        challenger.Ped.Heading = 90f; // Face left
+                    }
 
                     fighterOdds[0] = CalculateOdds(currentFighter.Ped.Health);
                     fighterOdds[1] = CalculateOdds(challenger.Ped.Health);
@@ -1097,10 +1107,9 @@ public class FightClub : Script
         }
         else
         {
-            StartFightClub(currentArenaName);
+            StartFightClub(currentArenaName); // No valid winner, restart fresh
         }
     }
-
     // Modified: Added parameter to distinguish manual vs. distance-based deactivation
     private void EndFightClub(bool manualDeactivation = true)
     {
@@ -1135,7 +1144,6 @@ public class FightClub : Script
             Notification.PostTicker("Fight Club is already ended.", true, true);
         }
     }
-
     private void ClearFighters()
     {
         foreach (Fighter f in fightParticipants)
@@ -1162,3 +1170,4 @@ public class FightClub : Script
         bettedFighter = null;
     }
 }
+
